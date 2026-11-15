@@ -1,0 +1,6 @@
+tb1
+D 0
+I 计数值
+O localStorage 读写
+P 键名 counter，读时解析整数
+R 读取失败或非法值时回落 0

@@ -1,0 +1,11 @@
+{
+  "name": "thinkbuilder",
+  "private": true,
+  "type": "module",
+  "description": "ThinkBuilder: 面向 AI 的流程图设计器。core + tbfd（零依赖）。",
+  "scripts": {
+    "selftest": "node scripts/selftest.mjs",
+    "tbfd": "node packages/tbfd/server.mjs",
+    "vendor": "node scripts/vendor-core.mjs"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+.thinkbuilder/
+.dsh-meow/
+.export-probe/
+*.log
+*.bak-*
+.DS_Store
+Thumbs.db
