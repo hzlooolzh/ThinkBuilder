@@ -340,10 +340,31 @@ export async function apply(ctx) {
 
   // webServer 是可选服务：用 ctx.inject 等它出现再挂路由。
   // 直接 ctx.get('webServer') 在服务尚未就绪时会拿到 undefined，插件虽然 active 但路由永远不注册。
-  ctx.inject(['webServer'], (ctx) => {
+  //
+  // 安全：webServer.register 挂的路由**没有** DSH 的准入检查，任何在浏览器里打开的网页
+  // 都能带着用户的本地 IP 来调这些接口（读工程、写文件、导出树）。所以每个请求先过
+  // connection 的信任围栏：Host/Origin 检查（挡 DNS rebinding 与跨站调用）+ 浏览器登录令牌。
+  // 围栏不可用时一律拒绝（失败关闭），不做"没有检查"的访问。
+  ctx.inject(['webServer', 'connection'], (ctx) => {
     const web = ctx.webServer
     if (!web || typeof web.register !== 'function') return
-    const dispose = web.register({ kind: 'prefix', path: PREFIX, handler: route })
+    const fence = (req, res) => {
+      const connection = ctx.connection
+      if (!connection || typeof connection.requestRejection !== 'function') {
+        json(res, 503, { ok: false, error: 'DSH 连接服务不可用，已拒绝这次请求（不做无检查的访问）' })
+        return false
+      }
+      const rejection = connection.requestRejection(req)
+      if (rejection === undefined) return true
+      res.statusCode = rejection
+      res.end()
+      return false
+    }
+    const handler = (req, res) => {
+      if (!fence(req, res)) return
+      return route(req, res)
+    }
+    const dispose = web.register({ kind: 'prefix', path: PREFIX, handler })
     if (typeof dispose === 'function') ctx.effect(() => dispose, 'thinkbuilder: http route')
   })
 }

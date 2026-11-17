@@ -19,14 +19,21 @@ const ok = (cond, msg) => {
 
 let handler = null
 // 假 ctx：webServer 立即就绪；inject 同步回调（真实 cordis 是等依赖变化，这里只验路由）
+// connection 返回 undefined = 请求通过信任围栏；改成 401/403 可验证围栏确实拦人。
+let rejectWith
 const fakeWeb = { register: (route) => ((handler = route.handler), () => {}) }
+const fakeConnection = { requestRejection: () => rejectWith }
 const fakeCtx = {
   webServer: fakeWeb,
-  get: (k) => (k === 'webServer' ? fakeWeb : undefined),
+  connection: fakeConnection,
+  get: (k) => (k === 'webServer' ? fakeWeb : k === 'connection' ? fakeConnection : undefined),
   effect: (fn) => fn(),
 }
-fakeCtx.inject = (deps, cb) => cb(fakeCtx)
-apply(fakeCtx)
+fakeCtx.inject = (deps, cb) => {
+  if (deps.some((d) => !fakeCtx[d])) return
+  cb(fakeCtx)
+}
+await apply(fakeCtx)
 ok(typeof handler === 'function', 'apply() 注册了 /thinkbuilder 路由')
 
 const server = http.createServer((req, res) => handler(req, res))
@@ -39,6 +46,11 @@ const get = async (p) => {
 const post = async (p, body) => {
   const r = await fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
   return { status: r.status, body: await r.json() }
+}
+// 围栏拒绝时没有 JSON body，只能看状态码
+const getRaw = async (p) => {
+  const r = await fetch(base + p)
+  return { status: r.status, text: await r.text() }
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-editor-'))
@@ -94,6 +106,14 @@ try {
   const exp2 = await post('/export', { dir: tmp, ir: edit, target: outTmp })
   ok(exp2.body.ok && fs.existsSync(path.join(projOut, '记账小程序__TBROOT__', '统计改名', '_.tb')), '改名后目录跟着重建')
   fs.rmSync(outTmp, { recursive: true, force: true })
+
+  // 信任围栏：connection 报拒绝时，路由必须原样回绝、不执行业务逻辑
+  rejectWith = 403
+  const fenced = await getRaw('/ping')
+  ok(fenced.status === 403 && !fenced.text, 'connection 拒绝时路由直接回绝（403，不执行接口）')
+  rejectWith = undefined
+  const open = await getRaw('/ping')
+  ok(open.status === 200 && /"ok":true/.test(open.text), '放行后接口恢复 200')
 } catch (e) {
   console.log(`  ✗ 异常：${e.stack || e.message}`)
   fails++

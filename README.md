@@ -54,6 +54,8 @@ dsh plugin add github:hzlooolzh/ThinkBuilder#path:/packages/editor-ui
 
 编辑中的状态存在项目文件夹的 `.thinkbuilder/project.json`（自动保存），导出的 `__TBROOT__` 树是给 AI 读的只读视图。
 
+面板调用的 HTTP 路由（`/thinkbuilder/api/*`）每个请求都先过 DSH 的信任围栏：`ctx.connection.requestRejection(req)` 做 Host/Origin 检查（挡 DNS rebinding 与跨站调用）并要求浏览器登录令牌，围栏不可用时直接 503 拒绝。也就是说，别的网页即使知道本地端口也调不动这些接口。
+
 ## AI 侧
 
 插件自带 6 个工具（无需额外 MCP 服务）：`tb_boot`（读整张图，自带完整读法）、`tb_block`（读一块）、`tb_children`、`tb_find`、`tb_check`、`tb_set_done`（完成打勾，编辑器里显示 ✓）。项目按当前会话的工作目录自动定位。
