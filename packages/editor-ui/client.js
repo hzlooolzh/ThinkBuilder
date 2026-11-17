@@ -60,11 +60,12 @@ window.__ModuleLoader__.load({
       .tbx-primary { background:var(--tb-brand); border-color:var(--tb-brand); color:var(--dsw-alias-label-primary-foreground,#fff); }
       .tbx-primary:hover { filter:brightness(1.06); background:var(--tb-brand); }
       .tbx-main { flex:1; min-height:0; display:flex; }
-      .tbx-canvas { position:relative; flex:1; min-width:0; overflow:hidden; background:var(--tb-bg); cursor:default; }
+      .tbx-canvas { position:relative; flex:1; min-width:0; overflow:hidden; background:var(--tb-bg); cursor:default; touch-action:none; -webkit-user-select:none; user-select:none; }
       .tbx-canvas.panning { cursor:grabbing; }
+      .tbx-canvas.panning * { cursor:grabbing !important; }
       .tbx-grid { position:absolute; inset:0; background-image:radial-gradient(circle at 1px 1px, var(--tb-grid) 1px, transparent 0); background-size:22px 22px; }
       .tbx-world { position:absolute; left:0; top:0; transform-origin:0 0; }
-      .tbx-node { position:absolute; user-select:none; box-sizing:border-box; }
+      .tbx-node { position:absolute; user-select:none; -webkit-user-drag:none; box-sizing:border-box; }
       .tbx-leaf { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:3px; padding:8px 10px; box-sizing:border-box; box-shadow:0 1px 3px rgba(16,24,40,.14); }
       .tbx-r { border-radius:8px; background:rgba(108,142,191,.20); border:1.5px solid rgba(108,142,191,.85); }
       .tbx-d { background:rgba(215,155,0,.20); border:1.5px solid rgba(215,155,0,.85); }
@@ -463,10 +464,26 @@ window.__ModuleLoader__.load({
     function Canvas({ ir, levelId, showNext, selected, setSelected, enterLevel, edit, onMutated, note, connect, setConnect }) {
       const wrapRef = useRef(null)
       const [view, setView] = useState({ x: 40, y: 30, s: 1 })
+      const [panning, setPanning] = useState(false)
       const [armed, setArmed] = useState(null) // 连线起点 id
       const [tick, setTick] = useState(0)
       const dragRef = useRef(null)
       const panRef = useRef(null)
+
+      // 兜底：窗口失去焦点（切标签页/Alt+Tab）时不会收到 pointerup，强制复位拖动状态
+      useEffect(() => {
+        const reset = () => {
+          panRef.current = null
+          dragRef.current = null
+          setPanning(false)
+        }
+        window.addEventListener('blur', reset)
+        document.addEventListener('visibilitychange', reset)
+        return () => {
+          window.removeEventListener('blur', reset)
+          document.removeEventListener('visibilitychange', reset)
+        }
+      }, [])
 
       const scene = useMemo(() => buildScene(ir, levelId, showNext), [ir, levelId, showNext, tick])
 
@@ -497,6 +514,7 @@ window.__ModuleLoader__.load({
         if (e.button !== 0) return
         e.stopPropagation()
         e.preventDefault()
+        const el = capture(e)
         const box = scene.abs.get(block.id)
         if (!box) return
         const before = clone(ir)
@@ -512,9 +530,11 @@ window.__ModuleLoader__.load({
           }
           setTick((n) => n + 1)
         }
-        const up = () => {
+        const up = (ev) => {
           window.removeEventListener('pointermove', move)
           window.removeEventListener('pointerup', up)
+          window.removeEventListener('pointercancel', up)
+          release(el, ev)
           onMutated(before)
         }
         window.addEventListener('pointermove', move)
@@ -545,6 +565,8 @@ window.__ModuleLoader__.load({
           return
         }
         setSelected(block.id)
+        e.preventDefault() // 拖块时不要让浏览器开始选区/拖拽搜索
+        const el = capture(e)
         const start = { cx: e.clientX, cy: e.clientY, id: block.id, x: block.layout.x || 0, y: block.layout.y || 0, moved: false, before: clone(ir), wx: 0, wy: 0 }
         dragRef.current = start
         const move = (ev) => {
@@ -561,19 +583,38 @@ window.__ModuleLoader__.load({
           b.layout = clampInside(b, Math.round(d.x + dx), Math.round(d.y + dy))
           setTick((n) => n + 1)
         }
-        const up = () => {
+        const up = (ev) => {
           window.removeEventListener('pointermove', move)
           window.removeEventListener('pointerup', up)
+          window.removeEventListener('pointercancel', up)
+          release(el, ev)
           const d = dragRef.current
           dragRef.current = null
           if (d && d.moved) onMutated(d.before)
         }
         window.addEventListener('pointermove', move)
         window.addEventListener('pointerup', up)
+        window.addEventListener('pointercancel', up)
+      }
+
+      // 拖动时把指针捕获到画布上：鼠标甩出面板/窗口也能收到 pointerup，
+      // 否则会停在"一直在拖"的状态（小手不恢复、松手后图还跟着走）
+      const capture = (e) => {
+        const el = wrapRef.current
+        if (!el || typeof el.setPointerCapture !== 'function') return null
+        try { el.setPointerCapture(e.pointerId) } catch { /* 旧浏览器忽略 */ }
+        return el
+      }
+      const release = (el, e) => {
+        if (!el) return
+        try { el.releasePointerCapture(e.pointerId) } catch { /* 已经释放 */ }
       }
 
       const bgDown = (e) => {
         if (e.button !== 0) return
+        e.preventDefault() // 别让浏览器把拖动当成选区/拖拽搜索
+        const el = capture(e)
+        setPanning(true)
         const start = { cx: e.clientX, cy: e.clientY, x: view.x, y: view.y, moved: false }
         panRef.current = start
         setArmed(null)
@@ -586,15 +627,19 @@ window.__ModuleLoader__.load({
           if (Math.abs(dx) + Math.abs(dy) > 3) p.moved = true
           setView((v) => ({ ...v, x: p.x + dx, y: p.y + dy }))
         }
-        const up = () => {
+        const up = (ev) => {
           window.removeEventListener('pointermove', move)
           window.removeEventListener('pointerup', up)
+          window.removeEventListener('pointercancel', up)
+          release(el, ev)
           const p = panRef.current
           panRef.current = null
+          setPanning(false)
           if (p && !p.moved) setSelected(null)
         }
         window.addEventListener('pointermove', move)
         window.addEventListener('pointerup', up)
+        window.addEventListener('pointercancel', up)
       }
 
       useEffect(() => {
@@ -630,7 +675,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { ref: wrapRef, className: 'tbx-canvas' + (panRef.current ? ' panning' : ''), onPointerDown: bgDown },
+        { ref: wrapRef, className: 'tbx-canvas' + (panning ? ' panning' : ''), onPointerDown: bgDown, onDragStart: (e) => e.preventDefault(), onContextMenu: (e) => e.preventDefault() },
         h('div', { className: 'tbx-grid' }),
         h(
           'div',
