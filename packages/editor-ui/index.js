@@ -24,6 +24,16 @@ const PREFIX = '/thinkbuilder'
 const STATE_DIR = '.thinkbuilder'
 const STATE_FILE = 'project.json'
 
+// 读自身版本（package.json 与插件一起发布；读不到不影响功能）
+const VERSION = (() => {
+  try {
+    const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+    return JSON.parse(fs.readFileSync(path.join(here, 'package.json'), 'utf8')).version || '?'
+  } catch {
+    return '?'
+  }
+})()
+
 const json = (res, code, data) => {
   const body = JSON.stringify(data)
   res.writeHead(code, {
@@ -246,7 +256,7 @@ const route = async (req, res) => {
   const p = url.pathname.replace(/\/+$/, '')
   const method = req.method || 'GET'
   try {
-    if (p === `${PREFIX}/api/ping`) return json(res, 200, { ok: true })
+    if (p === `${PREFIX}/api/ping`) return json(res, 200, { ok: true, version: VERSION })
     if (p === `${PREFIX}/api/projects`) {
       const dir = url.searchParams.get('dir') || ''
       if (!dir || !path.isAbsolute(dir)) return bad(res, '需要绝对路径 dir')
