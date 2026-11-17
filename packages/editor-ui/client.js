@@ -675,7 +675,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { ref: wrapRef, className: 'tbx-canvas' + (panning ? ' panning' : ''), onPointerDown: bgDown, onDragStart: (e) => e.preventDefault(), onContextMenu: (e) => e.preventDefault() },
+        { ref: wrapRef, className: 'tbx-canvas' + (panning ? ' panning' : ''), onPointerDown: bgDown, onDragStart: (e) => e.preventDefault() },
         h('div', { className: 'tbx-grid' }),
         h(
           'div',
