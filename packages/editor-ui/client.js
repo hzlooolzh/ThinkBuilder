@@ -470,6 +470,16 @@ window.__ModuleLoader__.load({
 
       const scene = useMemo(() => buildScene(ir, levelId, showNext), [ir, levelId, showNext, tick])
 
+      // 连线只点了起点就按 Esc：必须能把"已选起点"也清掉，否则后面点谁都还在连线
+      useEffect(() => {
+        if (!armed) return undefined
+        const onKey = (e) => {
+          if (e.key === 'Escape') setArmed(null)
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [armed])
+
       const screenToWorld = (cx, cy) => {
         const r = wrapRef.current.getBoundingClientRect()
         return { x: (cx - r.left - view.x) / view.s, y: (cy - r.top - view.y) / view.s }
@@ -1280,6 +1290,18 @@ window.__ModuleLoader__.load({
         }
       }
 
+      // 退出工程：先落盘再回工程列表（Esc 在最外层、或点左上角「工程列表」）
+      const backToList = async () => {
+        setMore(false)
+        await saveNow('auto')
+        setIr(null)
+        setSelected(null)
+        setDirty(false)
+        setStats(null)
+        setCheck('')
+        setError('')
+      }
+
       const runCheck = async () => {
         if (!ir) return
         try {
@@ -1374,8 +1396,12 @@ window.__ModuleLoader__.load({
             if (exporting) return setExporting(false)
             if (connect) return setConnect(false)
             const cur = ir.blocks[levelId]
-            if (cur && cur.parentId) return setLevelId(cur.parentId)
-            return setSelected(null)
+            // 先回上一层（进入容器后必须能出来）；到最外层再按才取消选中
+            if (cur && cur.parentId && cur.parentId !== levelId) return setLevelId(cur.parentId)
+            if (selected) return setSelected(null)
+            // 已经在最外层、也没选中任何块：Esc 退出工程，回到列表
+            void backToList()
+            return undefined
           }
           if (typing) return
           if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -1451,15 +1477,18 @@ window.__ModuleLoader__.load({
       /* ------------- 编辑页 ------------- */
 
       const parentOfLevel = ir.blocks[levelId] ? ir.blocks[levelId].parentId : null
-      const canGoUp = !!parentOfLevel
+      // 防呆：父块指向自己（坏数据）时不能把"上一层"当成空操作，否则人就出不去了
+      const canGoUp = !!parentOfLevel && parentOfLevel !== levelId
       const crumbs = chain(ir, levelId)
 
       return h(
         'div',
         { className: 'tbx-root' },
         h('div', { className: 'tbx-bar' },
-          // 左：层级导航
+          // 左：退出 + 层级导航
           h('div', { className: 'tbx-tbgrp' },
+            h('button', { className: 'tbx-btn', onClick: backToList, title: '保存并回到工程列表（不会丢东西，改动已自动保存）' }, '← 工程列表'),
+            h('div', { className: 'tbx-sep' }),
             h('button', { className: 'tbx-btn', disabled: !canGoUp, onClick: () => setLevelId(parentOfLevel), title: '上一层（Esc）' }, '←'),
             h('div', { className: 'tbx-crumb' },
               crumbs.map((b, i) =>
@@ -1507,7 +1536,7 @@ window.__ModuleLoader__.load({
                     h('div', { key: 'mask', className: 'tbx-popmask', onPointerDown: () => setMore(false) }),
                     h('div', { key: 'menu', className: 'tbx-menu' },
                       h('button', { onClick: () => { setMore(false); runCheck() } }, '校验整张图'),
-                      h('button', { onClick: async () => { setMore(false); await saveNow('auto'); setIr(null); setSelected(null); setDirty(false); setMore(false) } }, '关闭工程'),
+                      h('button', { onClick: () => { setMore(false); void backToList() } }, '关闭工程（回列表）'),
                     ),
                   ]
                 : null,

@@ -1,6 +1,6 @@
 {
   "name": "thinkbuilder-editor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "ThinkBuilder：把流程图变成 AI 能直接照着干活的工程骨架。DSH 侧栏里画逻辑块，机械导出一个极省 token 的文件夹树，模型用 tb_boot/tb_block 顺着读、按块实现、逐块打勾。",
   "keywords": [
     "dsh",
