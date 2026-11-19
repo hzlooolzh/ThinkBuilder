@@ -85,7 +85,6 @@ packages/editor-ui/   DSH 插件：宿主工具 + 侧栏面板（本仓库发布
 packages/tbfd/        可选的 MCP 版本（同一套工具，给不走宿主的场景）
 fixtures/             四套示例工程（线性 / 并列+菱形 / 回环 / 半完成）
 scripts/              自检、导出/导入回归、HTTP 路由冒烟
-SPEC.md               `_.tb` 格式与导出规则的完整规范
 ```
 
 ## 开发
