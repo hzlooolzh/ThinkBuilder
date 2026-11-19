@@ -57,6 +57,7 @@ window.__ModuleLoader__.load({
       .tbx-btn:hover { background:var(--tb-hover); }
       .tbx-btn[aria-pressed="true"] { border-color:var(--tb-brand); color:var(--tb-brand); }
       .tbx-btn:disabled { opacity:.45; cursor:not-allowed; }
+      .tbx-iconbtn { display:inline-flex; align-items:center; justify-content:center; padding:3px 7px; }
       .tbx-primary { background:var(--tb-brand); border-color:var(--tb-brand); color:var(--dsw-alias-label-primary-foreground,#fff); }
       .tbx-primary:hover { filter:brightness(1.06); background:var(--tb-brand); }
       .tbx-main { flex:1; min-height:0; display:flex; }
@@ -566,7 +567,10 @@ window.__ModuleLoader__.load({
         }
         setSelected(block.id)
         e.preventDefault() // 拖块时不要让浏览器开始选区/拖拽搜索
-        const el = capture(e)
+        // 注意：这里**不能**立刻 setPointerCapture。捕获会把 pointerup 重定向到画布，
+        // 于是 click/dblclick 的目标也变成画布，块上的双击进层就失效了。
+        // 只在真正开始拖动（位移超过阈值）那一刻才捕获。
+        let el = null
         const start = { cx: e.clientX, cy: e.clientY, id: block.id, x: block.layout.x || 0, y: block.layout.y || 0, moved: false, before: clone(ir), wx: 0, wy: 0 }
         dragRef.current = start
         const move = (ev) => {
@@ -574,7 +578,11 @@ window.__ModuleLoader__.load({
           if (!d) return
           const dx = (ev.clientX - d.cx) / view.s
           const dy = (ev.clientY - d.cy) / view.s
-          if (Math.abs(dx) + Math.abs(dy) > 2) d.moved = true
+          if (!d.moved && Math.abs(dx) + Math.abs(dy) > 2) {
+            d.moved = true
+            el = capture(ev)
+          }
+          if (!d.moved) return
           const p = screenToWorld(ev.clientX, ev.clientY)
           d.wx = p.x
           d.wy = p.y
@@ -1532,8 +1540,6 @@ window.__ModuleLoader__.load({
         h('div', { className: 'tbx-bar' },
           // 左：退出 + 层级导航
           h('div', { className: 'tbx-tbgrp' },
-            h('button', { className: 'tbx-btn', onClick: backToList, title: '保存并回到工程列表（不会丢东西，改动已自动保存）' }, '← 工程列表'),
-            h('div', { className: 'tbx-sep' }),
             h('button', { className: 'tbx-btn', disabled: !canGoUp, onClick: () => setLevelId(parentOfLevel), title: '上一层（Esc）' }, '←'),
             h('div', { className: 'tbx-crumb' },
               crumbs.map((b, i) =>
@@ -1585,6 +1591,13 @@ window.__ModuleLoader__.load({
                     ),
                   ]
                 : null,
+            ),
+            h('button', { className: 'tbx-btn tbx-iconbtn', onClick: backToList, title: '回到工程列表（会先自动保存，不会丢东西）', 'aria-label': '回到工程列表' },
+              h('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                h('path', { d: 'M3.2 11.4 12 4.2l8.8 7.2' }),
+                h('path', { d: 'M6 10.2V19.8h12V10.2' }),
+                h('path', { d: 'M10 19.8v-4.9h4v4.9' }),
+              ),
             ),
           ),
           h('button', { className: 'tbx-btn', disabled: busy || !projDir, onClick: save, title: '保存到 .thinkbuilder/project.json' }, '保存'),
